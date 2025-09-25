@@ -26,13 +26,37 @@ router.post('/scan', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Not meal time now' });
     }
 
+    // Check meal attendance settings
+    const attendanceSettings = await req.prisma.mealAttendanceSettings.findFirst();
+    
     if (qrCode.startsWith('SUB-')) {
       const studentId = qrCode.substring(4);
       const student = await req.prisma.student.findUnique({
-        where: { registerNumber: studentId }
+        where: { registerNumber: studentId },
+        include: { hostel: true }
       });
 
       if (student) {
+        // Check if attendance marking is mandatory
+        if (attendanceSettings?.isMandatory) {
+          const today = new Date();
+          const reminder = await req.prisma.mealAttendanceReminder.findUnique({
+            where: {
+              studentId_reminderDate: {
+                studentId: student.id,
+                reminderDate: today
+              }
+            }
+          });
+
+          if (!reminder?.markedAttendance) {
+            return res.json({ 
+              valid: false, 
+              error: 'Please mark your meal attendance for today in the mobile app first' 
+            });
+          }
+        }
+
         const today = new Date();
         const subscription = await req.prisma.subscription.findFirst({
           where: {
@@ -40,7 +64,6 @@ router.post('/scan', authenticateToken, async (req, res) => {
             startDate: { lte: today },
             endDate: { gte: today },
             status: 'ACTIVE',
-            messFacilityId: student.messFacilityId ?? undefined
           }
         });
 
@@ -61,6 +84,20 @@ router.post('/scan', authenticateToken, async (req, res) => {
           return res.json({ valid: false, error: 'No meal plan available for this meal' });
         }
 
+        // Check if student marked willAttend for this meal
+        const attendancePreference = await req.prisma.mealAttendance.findUnique({
+          where: {
+            studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
+          }
+        });
+
+        if (attendanceSettings?.isMandatory && attendancePreference?.willAttend === false) {
+          return res.json({ 
+            valid: false, 
+            error: 'You marked that you will not attend this meal' 
+          });
+        }
+
         const existingAttendance = await req.prisma.mealAttendance.findUnique({
           where: {
             studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
@@ -71,14 +108,46 @@ router.post('/scan', authenticateToken, async (req, res) => {
           return res.json({ valid: false, error: 'Already served for this meal' });
         }
 
-        await req.prisma.mealAttendance.create({
+        await req.prisma.mealAttendance.upsert({
+          where: {
+            studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
+          },
+          update: {
+            attended: true,
+            attendedAt: new Date(),
+            scannerVerified: true,
+            scannerDeviceId: deviceId
+          },
+          create: {
+            studentId: student.id,
+            mealPlanId: mealPlan.id,
+            attended: true,
+            attendedAt: new Date(),
+            scannerVerified: true,
+            scannerDeviceId: deviceId,
+            willAttend: true
+          }
+        });
+
+        await req.prisma.mealAttendance.upsert({
+          where: {
+            studentId_mealPlanId: { studentId: student.id, mealPlanId: mealPlan.id }
+          },
+          update: {
+            attended: true,
+            attendedAt: new Date(),
+            scannerVerified: true,
+            scannerDeviceId: deviceId
+          },
+          create: {
           data: {
             studentId: student.id,
             mealPlanId: mealPlan.id,
             attended: true,
             attendedAt: new Date(),
             scannerVerified: true,
-            scannerDeviceId: deviceId
+            scannerDeviceId: deviceId,
+            willAttend: true
           }
         });
 

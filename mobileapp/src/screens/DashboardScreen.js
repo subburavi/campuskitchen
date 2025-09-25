@@ -19,6 +19,8 @@ export default function DashboardScreen({ navigation }) {
 const [hasActivePackage, setHasActivePackage] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [mealTimes, setMealTimes] = useState(null);
+  const [attendanceSettings, setAttendanceSettings] = useState(null);
+  const [canAccessMess, setCanAccessMess] = useState({ canAccess: true, reason: '' });
  const isFocused = useIsFocused();
   useEffect(() => {
     if(isFocused){
@@ -33,11 +35,13 @@ const [hasActivePackage, setHasActivePackage] = useState(false);
 
   const loadDashboardData = async () => {
     try {
-      const [mealsData, qrData, subscriptionData, notificationCount] = await Promise.all([
+      const [mealsData, qrData, subscriptionData, notificationCount, attendanceSettings, accessCheck] = await Promise.all([
         apiService.getTodaysMeals(),
         apiService.generateQRCode(),
         apiService.getCurrentSubscription(),
-        apiService.getUnreadNotificationCount()
+        apiService.getUnreadNotificationCount(),
+        apiService.getAttendanceSettings(),
+        apiService.canAccessMess()
       ]);
 console.log('Today meals data:', qrData);
       setTodaysMeals(mealsData);
@@ -45,6 +49,8 @@ console.log('Today meals data:', qrData);
       setHasActivePackage(qrData.status=='active' ? true : false);
       setCurrentSubscription(subscriptionData);
       setUnreadCount(notificationCount.count);
+      setAttendanceSettings(attendanceSettings);
+      setCanAccessMess(accessCheck);
       // fetch meal times for dynamic current meal calculation
       try {
         const mt = await apiService.getMealTimes();
@@ -188,6 +194,28 @@ console.log('Today meals data:', qrData);
             You don’t have an active pack.{"\n"}Please buy a package or order a meal.
           </Text>
         </View>
+          {/* Attendance Warning for Mandatory Settings */}
+          {attendanceSettings?.isMandatory && !canAccessMess.canAccess && (
+            <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+              <View className="flex-row items-center mb-2">
+          {(!hasActivePackage || (attendanceSettings?.isMandatory && !canAccessMess.canAccess)) && (
+                <Text className="text-red-800 font-semibold ml-2">Action Required</Text>
+              </View>
+              <Text className="text-red-700 text-sm">
+                {!hasActivePackage 
+                  ? "You don't have an active pack.\nPlease buy a package or order a meal."
+                  : canAccessMess.reason
+                }
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('MealPlan')}
+                className="bg-red-600 px-4 py-2 rounded-lg mt-2"
+              >
+                <Text className="text-white font-semibold text-center">Mark Attendance</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
       )}
     </View>
  

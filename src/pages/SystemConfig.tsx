@@ -70,6 +70,30 @@ const SystemConfig: React.FC = () => {
       label: 'Rating Window (minutes)',
       type: 'number',
       description: 'Time window after meal to allow ratings'
+    },
+    {
+      key: 'attendance_mandatory',
+      value: 'false',
+      category: 'meals',
+      label: 'Mandatory Meal Attendance',
+      type: 'boolean',
+      description: 'Require students to mark attendance for next day meals'
+    },
+    {
+      key: 'attendance_reminder_start',
+      value: '15:00',
+      category: 'meals',
+      label: 'Attendance Reminder Start Time',
+      type: 'text',
+      description: 'Time to start sending attendance reminders (24h format)'
+    },
+    {
+      key: 'attendance_cutoff',
+      value: '23:00',
+      category: 'meals',
+      label: 'Attendance Marking Cutoff',
+      type: 'text',
+      description: 'Last time students can mark attendance (24h format)'
     }
   ];
 

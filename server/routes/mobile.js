@@ -59,15 +59,22 @@ const generateOTP = () => {
 // Send OTP
 router.post('/send-otp', async (req, res) => {
   try {
-    const { registerNumber } = req.body;
+    const { registerNumber, mobileNumber } = req.body;
 
-    if (!registerNumber) {
-      return res.status(400).json({ error: 'Register number is required' });
+    if (!registerNumber && !mobileNumber) {
+      return res.status(400).json({ error: 'Register number or mobile number is required' });
     }
 
     // Check if student exists
-    const student = await req.prisma.student.findUnique({
-      where: { registerNumber }
+    const whereClause = registerNumber 
+      ? { registerNumber }
+      : { mobileNumber };
+
+    const student = await req.prisma.student.findFirst({
+      where: whereClause,
+      include: {
+        hostel: true
+      }
     });
 
     // Only send OTP if student exists
@@ -83,7 +90,7 @@ router.post('/send-otp', async (req, res) => {
     const otp = generateOTP();
     
     // Store OTP with expiration (5 minutes)
-    otpStore.set(registerNumber, {
+    otpStore.set(registerNumber || mobileNumber, {
       otp,
       expires: Date.now() + 5 * 60 * 1000,
       attempts: 0
@@ -102,7 +109,7 @@ console.log(smsResult);
       });
     }
 
-    console.log(`OTP sent via SMS to ${registerNumber}: ${otp}`);
+    console.log(`OTP sent via SMS to ${registerNumber || mobileNumber}: ${otp}`);
     
     res.json({ 
       message: 'OTP sent successfully to your registered mobile number',
@@ -117,25 +124,25 @@ console.log(smsResult);
 // Verify OTP
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { registerNumber, otp } = req.body;
+    const { registerNumber, mobileNumber, otp } = req.body;
 
-    if (!registerNumber || !otp) {
-      return res.status(400).json({ error: 'Register number and OTP are required' });
+    if ((!registerNumber && !mobileNumber) || !otp) {
+      return res.status(400).json({ error: 'Register number/mobile number and OTP are required' });
     }
 
-    const storedOtpData = otpStore.get(registerNumber);
+    const storedOtpData = otpStore.get(registerNumber || mobileNumber);
 
     if (!storedOtpData) {
       return res.status(400).json({ error: 'OTP not found or expired' });
     }
 
     if (Date.now() > storedOtpData.expires) {
-      otpStore.delete(registerNumber);
+      otpStore.delete(registerNumber || mobileNumber);
       return res.status(400).json({ error: 'OTP expired' });
     }
 
     if (storedOtpData.attempts >= 3) {
-      otpStore.delete(registerNumber);
+      otpStore.delete(registerNumber || mobileNumber);
       return res.status(400).json({ error: 'Too many attempts' });
     }
 
@@ -145,11 +152,18 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     // OTP verified, remove from store
-    otpStore.delete(registerNumber);
+    otpStore.delete(registerNumber || mobileNumber);
 
     // Get student data
-    const student = await req.prisma.student.findUnique({
-      where: { registerNumber }
+    const whereClause = registerNumber 
+      ? { registerNumber }
+      : { mobileNumber };
+
+    const student = await req.prisma.student.findFirst({
+      where: whereClause,
+      include: {
+        hostel: true
+      }
     });
 
     // Generate JWT token with longer expiration
@@ -165,7 +179,9 @@ router.post('/verify-otp', async (req, res) => {
         id: student.id,
         name: student.name,
         registerNumber: student.registerNumber,
-        mobileNumber: student.mobileNumber
+        mobileNumber: student.mobileNumber,
+        isHosteler: student.isHosteler,
+        hostel: student.hostel
       }
     });
   } catch (error) {
@@ -217,6 +233,8 @@ router.get('/profile', authenticateToken1, async (req, res) => {
             attendances: true,
             ratings: true
           }
+        },
+        hostel: true
         }
       }
     });
@@ -228,6 +246,51 @@ router.get('/profile', authenticateToken1, async (req, res) => {
     res.json(student);
   } catch (error) {
     console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get meal attendance settings
+router.get('/attendance-settings', authenticateToken1, async (req, res) => {
+  try {
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    res.json(settings || {
+      isMandatory: false,
+      reminderStartTime: '15:00',
+      reminderEndTime: '22:00',
+      cutoffTime: '23:00'
+    });
+  } catch (error) {
+    console.error('Get attendance settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Check if student can access mess (based on attendance marking)
+router.get('/can-access-mess', authenticateToken1, async (req, res) => {
+  try {
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    
+    if (!settings?.isMandatory) {
+      return res.json({ canAccess: true, reason: 'Attendance marking not mandatory' });
+    }
+
+    const today = new Date();
+    const reminder = await req.prisma.mealAttendanceReminder.findUnique({
+      where: {
+        studentId_reminderDate: {
+          studentId: req.user.studentId,
+          reminderDate: today
+        }
+      }
+    });
+
+    res.json({ 
+      canAccess: reminder?.markedAttendance || false,
+      reason: reminder?.markedAttendance ? 'Attendance marked' : 'Please mark tomorrow\'s meal attendance'
+    });
+  } catch (error) {
+    console.error('Check access error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -310,6 +373,7 @@ router.get('/meals/weekly/by-user', authenticateToken1, async (req, res) => {
             const attendance = attendances.find(a => a.mealPlanId === plan.id);
             const preference = mealPreferences.find(p => p.mealPlanId === plan.id);
             const dishNames = plan.dishes.map(d => d.dish.name).join(', ');
+            
             return {
               id: plan.id,
               mealType: plan.meal,
@@ -325,6 +389,69 @@ router.get('/meals/weekly/by-user', authenticateToken1, async (req, res) => {
     res.json(weeklyPlan);
   } catch (error) {
     console.error('Get weekly meal plan error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Mark meal attendance for tomorrow (all meals at once)
+router.post('/meals/mark-tomorrow-attendance', authenticateToken1, async (req, res) => {
+  try {
+    const { mealAttendances } = req.body; // Array of { mealPlanId, willAttend }
+    
+    // Check if cutoff time has passed
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    if (settings?.cutoffTime && currentTime > settings.cutoffTime) {
+      return res.status(400).json({ error: 'Cutoff time has passed. Cannot mark attendance for tomorrow.' });
+    }
+
+    // Update all meal attendances
+    for (const attendance of mealAttendances) {
+      await req.prisma.mealAttendance.upsert({
+        where: {
+          studentId_mealPlanId: {
+            studentId: req.user.studentId,
+            mealPlanId: attendance.mealPlanId
+          }
+        },
+        update: {
+          willAttend: attendance.willAttend
+        },
+        create: {
+          studentId: req.user.studentId,
+          mealPlanId: attendance.mealPlanId,
+          willAttend: attendance.willAttend,
+          attended: false
+        }
+      });
+    }
+
+    // Mark reminder as completed
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    await req.prisma.mealAttendanceReminder.upsert({
+      where: {
+        studentId_reminderDate: {
+          studentId: req.user.studentId,
+          reminderDate: tomorrow
+        }
+      },
+      update: {
+        markedAttendance: true
+      },
+      create: {
+        studentId: req.user.studentId,
+        reminderDate: tomorrow,
+        markedAttendance: true
+      }
+    });
+
+    res.json({ message: 'Meal attendance marked successfully for tomorrow' });
+  } catch (error) {
+    console.error('Mark tomorrow attendance error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -737,6 +864,9 @@ router.get('/packages', authenticateToken1, async (req, res) => {
         _count: {
           select: { subscriptions: true }
         }
+        _count: {
+          select: { subscriptions: true }
+        }
       },
       orderBy: { price: 'asc' }
     });
@@ -744,6 +874,40 @@ router.get('/packages', authenticateToken1, async (req, res) => {
     res.json(packages);
   } catch (error) {
     console.error('Get packages error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get available packages for hostelers only
+router.get('/packages/hosteler', authenticateToken1, async (req, res) => {
+  try {
+    const student = await req.prisma.student.findUnique({
+      where: { id: req.user.studentId },
+      include: { hostel: true }
+    });
+
+    if (!student?.isHosteler) {
+      return res.json([]);
+    }
+
+    const packages = await req.prisma.package.findMany({
+      where: { 
+        active: true,
+        hostelIds: {
+          has: student.hostelId
+        }
+      },
+      include: {
+        messFacility: {
+          select: { name: true, location: true }
+        }
+      },
+      orderBy: { price: 'asc' }
+    });
+
+    res.json(packages);
+  } catch (error) {
+    console.error('Get hosteler packages error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -896,6 +1060,26 @@ router.get('/meal-times', authenticateToken1, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Get meal times error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get hostels
+router.get('/hostels', authenticateToken1, async (req, res) => {
+  try {
+    const hostels = await req.prisma.hostel.findMany({
+      where: { active: true },
+      include: {
+        messFacility: {
+          select: { name: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(hostels);
+  } catch (error) {
+    console.error('Get hostels error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

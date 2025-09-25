@@ -51,17 +51,21 @@ export default function NotificationsScreen() {
     }
 
     // Navigate based on notification type
-    if (notification.type === 'rating' && notification.mealPlan) {
+    if (notification.actionType === 'rating' && notification.actionData?.mealPlanId) {
       navigation.navigate('MealRating', { 
         meal: {
-          id: notification.mealPlan.id,
-          dishName: notification.mealPlan.dishes.map(d => d.dish.name).join(', '),
-          mealType: notification.mealPlan.meal,
-          time: getMealTime(notification.mealPlan.meal)
+          id: notification.actionData.mealPlanId,
+          dishName: notification.mealPlan?.dishes?.map(d => d.dish.name).join(', ') || 'Meal',
+          mealType: notification.mealPlan?.meal || 'LUNCH',
+          time: getMealTime(notification.mealPlan?.meal || 'LUNCH')
         }
       });
-    } else if (notification.type === 'subscription') {
+    } else if (notification.actionType === 'subscription') {
       navigation.navigate('Subscription');
+    } else if (notification.actionType === 'order_history') {
+      navigation.navigate('OrderHistory');
+    } else if (notification.actionType === 'meal_plan') {
+      navigation.navigate('MealPlan');
     }
   };
 

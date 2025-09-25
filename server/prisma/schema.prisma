@@ -51,6 +51,9 @@ model Student {
   employeeId     String?  @map("employee_id")
   department     String?
   photoUrl       String?  @map("photo_url")
+  isHosteler     Boolean  @default(true) @map("is_hosteler")
+  hostelId       String?  @map("hostel_id")
+  messName       String?  @map("mess_name")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -64,6 +67,8 @@ model Student {
   studentPhotos  StudentPhoto[]
   scannerLogs    ScannerLog[]
   orders         Order[]
+  hostel         Hostel?  @relation(fields: [hostelId], references: [id])
+  attendanceReminders MealAttendanceReminder[]
 
   @@map("students")
 }
@@ -113,6 +118,7 @@ model Package {
   durationDays   Int        @map("duration_days")
   price          Decimal    @db.Decimal(10, 2)
   mealsIncluded  MealType[] @map("meals_included")
+  hostelIds      String[]   @map("hostel_ids")
   active         Boolean    @default(true)
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
@@ -120,6 +126,7 @@ model Package {
   // Relations
   messFacility  MessFacility   @relation(fields: [messFacilityId], references: [id], onDelete: Cascade)
   subscriptions Subscription[]
+  hostels       Hostel[]
 
   @@map("packages")
 }
@@ -297,6 +304,8 @@ model Notification {
   type       String   @default("general")
   read       Boolean  @default(false)
   mealPlanId String?  @map("meal_plan_id") // ADDED: New field for meal plan reference
+  actionType String?  @map("action_type")
+  actionData Json?    @map("action_data")
   createdAt  DateTime @default(now()) @map("created_at")
   
   // Relations
@@ -306,6 +315,65 @@ model Notification {
   @@map("notifications")
 }
 
+model Hostel {
+  id             String       @id @default(uuid())
+  name           String
+  location       String?
+  capacity       Int          @default(0)
+  messFacilityId String?      @map("mess_facility_id")
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  messFacility MessFacility? @relation(fields: [messFacilityId], references: [id])
+  students     Student[]
+
+  @@map("hostels")
+}
+
+model MealAttendanceSettings {
+  id               String   @id @default(uuid())
+  isMandatory      Boolean  @default(false) @map("is_mandatory")
+  reminderStartTime String  @default("15:00") @map("reminder_start_time")
+  reminderEndTime  String   @default("22:00") @map("reminder_end_time")
+  cutoffTime       String   @default("23:00") @map("cutoff_time")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("meal_attendance_settings")
+}
+
+model PaymentGateway {
+  id            String   @id @default(uuid())
+  provider      String
+  testKeyId     String?  @map("test_key_id")
+  testKeySecret String?  @map("test_key_secret")
+  liveKeyId     String?  @map("live_key_id")
+  liveKeySecret String?  @map("live_key_secret")
+  webhookSecret String?  @map("webhook_secret")
+  isLive        Boolean  @default(false) @map("is_live")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("payment_gateways")
+}
+
+model MealAttendanceReminder {
+  id                String    @id @default(uuid())
+  studentId         String    @map("student_id")
+  reminderDate      DateTime  @map("reminder_date") @db.Date
+  notificationSentAt DateTime? @map("notification_sent_at")
+  markedAttendance  Boolean   @default(false) @map("marked_attendance")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, reminderDate])
+  @@map("meal_attendance_reminders")
+}
 
 model MenuItem {
   id              String   @id @default(uuid())
@@ -764,6 +832,7 @@ model AuditLog {
 // Enums
 enum UserRole {
   ADMIN
+  SUPERADMIN
   CHEF
   STORE
   COOK

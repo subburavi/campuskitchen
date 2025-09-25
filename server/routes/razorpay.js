@@ -6,11 +6,24 @@ import { sendPushNotification } from '../services/notificationService.js';
 
 const router = express.Router();
 
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// Get Razorpay instance with dynamic keys
+const getRazorpayInstance = async (prisma) => {
+  const gateway = await prisma.paymentGateway.findFirst({
+    where: { provider: 'razorpay', active: true }
+  });
+
+  if (!gateway) {
+    throw new Error('Payment gateway not configured');
+  }
+
+  const keyId = gateway.isLive ? gateway.liveKeyId : gateway.testKeyId;
+  const keySecret = gateway.isLive ? gateway.liveKeySecret : gateway.testKeySecret;
+
+  return new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret,
+  });
+};
 
 // Create Razorpay order for subscription
 router.post('/create-order', authenticateToken1, async (req, res) => {
@@ -28,6 +41,8 @@ router.post('/create-order', authenticateToken1, async (req, res) => {
     if (!pkg) {
       return res.status(404).json({ error: 'Package not found' });
     }
+
+    const razorpay = await getRazorpayInstance(req.prisma);
 
     const receipt = `R_${Math.random().toString(36).substring(2, 15)}`;
 
@@ -95,6 +110,8 @@ router.post('/create-food-order', authenticateToken1, async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    const razorpay = await getRazorpayInstance(req.prisma);
+
     const receipt = `ORDER_${order.orderNumber}`;
 
     // Create Razorpay order
@@ -133,11 +150,16 @@ router.post('/verify-payment', authenticateToken1, async (req, res) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, subscriptionId } = req.body;
 
+    const gateway = await req.prisma.paymentGateway.findFirst({
+      where: { provider: 'razorpay', active: true }
+    });
+    const keySecret = gateway.isLive ? gateway.liveKeySecret : gateway.testKeySecret;
+
     const body = `${razorpayOrderId}|${razorpayPaymentId}`;
 
     // Generate signature with Razorpay secret
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .createHmac('sha256', keySecret)
       .update(body.toString())
       .digest('hex');
 
@@ -205,11 +227,16 @@ router.post('/verify-food-payment', authenticateToken1, async (req, res) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderId } = req.body;
 
+    const gateway = await req.prisma.paymentGateway.findFirst({
+      where: { provider: 'razorpay', active: true }
+    });
+    const keySecret = gateway.isLive ? gateway.liveKeySecret : gateway.testKeySecret;
+
     const body = `${razorpayOrderId}|${razorpayPaymentId}`;
 
     // Generate signature with Razorpay secret
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .createHmac('sha256', keySecret)
       .update(body.toString())
       .digest('hex');
 
@@ -273,11 +300,15 @@ console.log('Payment verified for orderId:', orderId);
 // Razorpay webhook
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
+    const gateway = await req.prisma.paymentGateway.findFirst({
+      where: { provider: 'razorpay', active: true }
+    });
+    
     const signature = req.headers['x-razorpay-signature'];
     const body = req.body;
 
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .createHmac('sha256', gateway?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET)
       .update(body)
       .digest('hex');
 
@@ -326,6 +357,9 @@ async function handlePaymentCaptured(payment, prisma) {
           razorpayPaymentId: payment.id,
           webhookData: payment
         }
+          actionType: 'order_history',
+          actionData: { orderId: order.id }
+          actionType: 'subscription'
       });
 
       console.log('Subscription payment captured:', subscription.id);

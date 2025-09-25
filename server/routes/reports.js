@@ -521,4 +521,90 @@ router.get('/export', authenticateToken, requireRole(['ADMIN', 'FNB_MANAGER']), 
   }
 });
 
+// Get meal attendance report for admin/chef
+router.get('/meal-attendance-report', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN', 'CHEF', 'FNB_MANAGER']), async (req, res) => {
+  try {
+    const { date } = req.query;
+    const targetDate = date ? new Date(date) : new Date();
+    targetDate.setDate(targetDate.getDate() + 1); // Tomorrow
+    
+    const dayOfWeek = targetDate.getDay() === 0 ? 6 : targetDate.getDay() - 1;
+    
+    // Get all mess facilities
+    const messFacilities = await req.prisma.messFacility.findMany({
+      where: { active: true },
+      include: {
+        hostels: true
+      }
+    });
+
+    const report = [];
+
+    for (const facility of messFacilities) {
+      const mealPlans = await req.prisma.mealPlan.findMany({
+        where: {
+          messFacilityId: facility.id,
+          day: dayOfWeek
+        },
+        include: {
+          dishes: {
+            include: {
+              dish: true
+            }
+          }
+        }
+      });
+
+      const facilityReport = {
+        id: facility.id,
+        name: facility.name,
+        location: facility.location,
+        meals: {}
+      };
+
+      for (const mealPlan of mealPlans) {
+        // Get attendance count for this meal
+        const attendanceCount = await req.prisma.mealAttendance.count({
+          where: {
+            mealPlanId: mealPlan.id,
+            willAttend: true
+          }
+        });
+
+        // Get total eligible students (with active subscriptions)
+        const totalEligible = await req.prisma.subscription.count({
+          where: {
+            messFacilityId: facility.id,
+            status: 'ACTIVE',
+            startDate: { lte: targetDate },
+            endDate: { gte: targetDate },
+            package: {
+              mealsIncluded: {
+                has: mealPlan.meal
+              }
+            }
+          }
+        });
+
+        facilityReport.meals[mealPlan.meal] = {
+          dishNames: mealPlan.dishes.map(d => d.dish.name).join(', '),
+          attendingCount: attendanceCount,
+          totalEligible,
+          attendancePercentage: totalEligible > 0 ? ((attendanceCount / totalEligible) * 100).toFixed(1) : 0
+        };
+      }
+
+      report.push(facilityReport);
+    }
+
+    res.json({
+      date: targetDate.toISOString().split('T')[0],
+      facilities: report
+    });
+  } catch (error) {
+    console.error('Meal attendance report error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

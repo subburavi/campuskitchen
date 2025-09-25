@@ -179,6 +179,13 @@ const Reports: React.FC = () => {
             <BarChart3 size={16} />
             <span>Comprehensive Reports</span>
           </button>
+          <button
+            onClick={() => navigate('/reports/meal-attendance')}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+          >
+            <Users size={16} />
+            <span>Meal Attendance Report</span>
+          </button>
         </div>
       </div>
 

@@ -204,6 +204,9 @@ router.get('/packages', authenticateToken, requireRole(['FNB_MANAGER']), async (
         _count: {
           select: { subscriptions: true }
         }
+        _count: {
+          select: { subscriptions: true }
+        }
       },
       orderBy: { name: 'asc' }
     });
@@ -230,6 +233,29 @@ router.post('/packages', authenticateToken, requireRole(['FNB_MANAGER']), async 
     res.status(201).json(pkg);
   } catch (error) {
     console.error('Create package error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get hostels
+router.get('/hostels', authenticateToken, requireRole(['FNB_MANAGER', 'ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const hostels = await req.prisma.hostel.findMany({
+      where: { active: true },
+      include: {
+        messFacility: {
+          select: { name: true }
+        },
+        _count: {
+          select: { students: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(hostels);
+  } catch (error) {
+    console.error('Get hostels error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

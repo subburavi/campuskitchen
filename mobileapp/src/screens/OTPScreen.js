@@ -6,12 +6,14 @@ import { apiService } from '../services/apiService';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function OTPScreen({ route, navigation }) {
-  const { registerNumber } = route.params;
+  const { registerNumber, mobileNumber, loginType } = route.params;
   const { login } = useAuth();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resendTimer, setResendTimer] = useState(30);
   const inputRefs = useRef([]);
+
+  const identifier = loginType === 'register' ? registerNumber : mobileNumber;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -51,7 +53,7 @@ export default function OTPScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      const response = await apiService.verifyOTP(registerNumber, otpString);
+      const response = await apiService.verifyOTP(registerNumber, mobileNumber, otpString);
       await login(response.user, response.token);
       Toast.show({
         type: 'success',
@@ -71,7 +73,10 @@ export default function OTPScreen({ route, navigation }) {
     if (resendTimer > 0) return;
 
     try {
-      await apiService.sendOTP(registerNumber);
+      await apiService.sendOTP(
+        loginType === 'register' ? registerNumber : null,
+        loginType === 'mobile' ? mobileNumber : null
+      );
       setResendTimer(30);
       Toast.show({
         type: 'success',
@@ -98,7 +103,7 @@ export default function OTPScreen({ route, navigation }) {
             <Text className="text-gray-600 text-center mt-2">
               Enter the 6-digit code sent to your registered mobile number
             </Text>
-            <Text className="text-primary font-semibold mt-1">{registerNumber}</Text>
+            <Text className="text-primary font-semibold mt-1">{identifier}</Text>
           </View>
 
           {/* OTP Input */}

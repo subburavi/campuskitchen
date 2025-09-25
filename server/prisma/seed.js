@@ -380,6 +380,47 @@ async function main() {
     }),
   ]);
 
+  // Create hostels
+  console.log('Creating hostels...');
+  const hostels = await Promise.all([
+    prisma.hostel.upsert({
+      where: { id: 'hostel-001' },
+      update: {},
+      create: {
+        id: 'hostel-001',
+        name: 'Girls Hostel - Nursing',
+        location: 'Campus North Block',
+        capacity: 300,
+        messFacilityId: messFacilities[0].id,
+        active: true
+      }
+    }),
+    prisma.hostel.upsert({
+      where: { id: 'hostel-002' },
+      update: {},
+      create: {
+        id: 'hostel-002',
+        name: 'Boys Hostel - Nursing',
+        location: 'Campus South Block',
+        capacity: 250,
+        messFacilityId: messFacilities[1].id,
+        active: true
+      }
+    }),
+    prisma.hostel.upsert({
+      where: { id: 'hostel-003' },
+      update: {},
+      create: {
+        id: 'hostel-003',
+        name: 'Gowthami Hostel',
+        location: 'Campus East Block',
+        capacity: 200,
+        messFacilityId: messFacilities[2].id,
+        active: true
+      }
+    }),
+  ]);
+
   // Create scanner user for first mess facility
   const scannerUser = await prisma.user.upsert({
     where: { email: 'scanner@foodservice.com' },
@@ -408,6 +449,7 @@ async function main() {
         durationDays: 30,
         price: 2500.00,
         mealsIncluded: ['LUNCH', 'DINNER'],
+        hostelIds: [hostels[0].id, hostels[1].id],
         active: true
       }
     }),
@@ -422,6 +464,7 @@ async function main() {
         durationDays: 30,
         price: 3500.00,
         mealsIncluded: ['BREAKFAST', 'LUNCH', 'SNACKS', 'DINNER'],
+        hostelIds: [hostels[0].id, hostels[1].id, hostels[2].id],
         active: true
       }
     }),
@@ -654,6 +697,8 @@ async function main() {
         roomNumber: 'A-101',
         userType: 'STUDENT',
         department: 'Computer Science',
+        isHosteler: true,
+        hostelId: hostels[0].id,
         qrCode: `QR_CS2021001_${crypto.randomBytes(8).toString('hex')}`
       }
     }),
@@ -668,6 +713,8 @@ async function main() {
         userType: 'EMPLOYEE',
         employeeId: 'EMP001',
         department: 'Computer Science',
+        isHosteler: false,
+        messName: 'Staff Mess',
         qrCode: `QR_EMP001_${crypto.randomBytes(8).toString('hex')}`
       }
     }),
@@ -682,6 +729,8 @@ async function main() {
         roomNumber: 'B-205',
         userType: 'STUDENT',
         department: 'Nursing',
+        isHosteler: true,
+        hostelId: hostels[2].id,
         qrCode: `QR_NS2021001_${crypto.randomBytes(8).toString('hex')}`
       }
     }),
@@ -865,6 +914,34 @@ async function main() {
           }
         ]
       }
+    }
+  });
+
+  // Create meal attendance settings
+  console.log('Creating meal attendance settings...');
+  await prisma.mealAttendanceSettings.upsert({
+    where: { id: 'default-settings' },
+    update: {},
+    create: {
+      id: 'default-settings',
+      isMandatory: false,
+      reminderStartTime: '15:00',
+      reminderEndTime: '22:00',
+      cutoffTime: '23:00'
+    }
+  });
+
+  // Create payment gateway settings
+  console.log('Creating payment gateway settings...');
+  await prisma.paymentGateway.upsert({
+    where: { provider: 'razorpay' },
+    update: {},
+    create: {
+      provider: 'razorpay',
+      testKeyId: 'rzp_test_default',
+      testKeySecret: 'test_secret_default',
+      isLive: false,
+      active: true
     }
   });
 

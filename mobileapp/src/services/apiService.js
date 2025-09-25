@@ -46,8 +46,8 @@ class ApiService {
   }
 
   // Auth endpoints
-  async sendOTP(registerNumber) {
-    const response = await this.api.post('/mobile/send-otp', { registerNumber });
+  async sendOTP(registerNumber, mobileNumber) {
+    const response = await this.api.post('/mobile/send-otp', { registerNumber, mobileNumber });
     return response.data;
   }
    async registerPushToken(token,Platform) {
@@ -55,8 +55,8 @@ class ApiService {
     return response.data;
   }
 
-  async verifyOTP(registerNumber, otp) {
-    const response = await this.api.post('/mobile/verify-otp', { registerNumber, otp });
+  async verifyOTP(registerNumber, mobileNumber, otp) {
+    const response = await this.api.post('/mobile/verify-otp', { registerNumber, mobileNumber, otp });
     return response.data;
   }
 
@@ -93,6 +93,38 @@ class ApiService {
       mealId,
       willAttend
     });
+    return response.data;
+  }
+
+  // Mark tomorrow's meal attendance (all meals at once)
+  async markTomorrowAttendance(mealAttendances) {
+    const response = await this.api.post('/mobile/meals/mark-tomorrow-attendance', {
+      mealAttendances
+    });
+    return response.data;
+  }
+
+  // Get meal attendance settings
+  async getAttendanceSettings() {
+    const response = await this.api.get('/mobile/attendance-settings');
+    return response.data;
+  }
+
+  // Check if student can access mess
+  async canAccessMess() {
+    const response = await this.api.get('/mobile/can-access-mess');
+    return response.data;
+  }
+
+  // Get hosteler packages only
+  async getHostelerPackages() {
+    const response = await this.api.get('/mobile/packages/hosteler');
+    return response.data;
+  }
+
+  // Get hostels
+  async getHostels() {
+    const response = await this.api.get('/mobile/hostels');
     return response.data;
   }
 

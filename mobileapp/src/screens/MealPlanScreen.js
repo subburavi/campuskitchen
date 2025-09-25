@@ -8,15 +8,43 @@ export default function MealPlanScreen({ navigation }) {
   const [weeklyPlan, setWeeklyPlan] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [attendanceSettings, setAttendanceSettings] = useState(null);
+  const [showTomorrowModal, setShowTomorrowModal] = useState(false);
+  const [tomorrowMeals, setTomorrowMeals] = useState([]);
 
   useEffect(() => {
     loadWeeklyPlan();
+    loadAttendanceSettings();
   }, []);
+
+  const loadAttendanceSettings = async () => {
+    try {
+      const settings = await apiService.getAttendanceSettings();
+      setAttendanceSettings(settings);
+    } catch (error) {
+      console.error('Error loading attendance settings:', error);
+    }
+  };
 
   const loadWeeklyPlan = async () => {
     try {
       const data = await apiService.getWeeklyMealPlan();
       setWeeklyPlan(data);
+      
+      // Check if we need to show tomorrow's attendance modal
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowData = data.find(day => 
+        new Date(day.date).toDateString() === tomorrow.toDateString()
+      );
+      
+      if (tomorrowData && attendanceSettings?.isMandatory) {
+        const hasUnmarkedMeals = tomorrowData.meals.some(meal => meal.willAttend === null);
+        if (hasUnmarkedMeals) {
+          setTomorrowMeals(tomorrowData.meals);
+          setShowTomorrowModal(true);
+        }
+      }
     } catch (error) {
       console.error('Error loading weekly plan:', error);
     } finally {
@@ -28,6 +56,26 @@ export default function MealPlanScreen({ navigation }) {
     setRefreshing(true);
     await loadWeeklyPlan();
     setRefreshing(false);
+  };
+
+  const handleTomorrowAttendance = async (mealAttendances) => {
+    try {
+      await apiService.markTomorrowAttendance(mealAttendances);
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Tomorrow\'s meal attendance marked successfully',
+      });
+      setShowTomorrowModal(false);
+      loadWeeklyPlan();
+    } catch (error) {
+      console.error('Error marking tomorrow attendance:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to mark attendance. Please try again.',
+      });
+    }
   };
 
   const handleAttendanceToggle = async (mealId, willAttend) => {
@@ -127,6 +175,20 @@ export default function MealPlanScreen({ navigation }) {
         </View>
       </View>
 
+      {/* Tomorrow's Attendance Modal */}
+      <Modal
+        visible={showTomorrowModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <TomorrowAttendanceForm
+          meals={tomorrowMeals}
+          isMandatory={attendanceSettings?.isMandatory}
+          onSubmit={handleTomorrowAttendance}
+          onCancel={() => setShowTomorrowModal(false)}
+        />
+      </Modal>
+
       <ScrollView 
         className="flex-1 px-6 -mt-4"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -209,3 +271,111 @@ export default function MealPlanScreen({ navigation }) {
     </View>
   );
 }
+
+// Tomorrow's Attendance Form Component
+const TomorrowAttendanceForm = ({ meals, isMandatory, onSubmit, onCancel }) => {
+  const [attendances, setAttendances] = useState(
+    meals.map(meal => ({
+      mealPlanId: meal.id,
+      mealType: meal.mealType,
+      dishName: meal.dishName,
+      willAttend: meal.willAttend !== null ? meal.willAttend : true
+    }))
+  );
+
+  const handleToggle = (index, willAttend) => {
+    const newAttendances = [...attendances];
+    newAttendances[index].willAttend = willAttend;
+    setAttendances(newAttendances);
+  };
+
+  const handleSubmit = () => {
+    onSubmit(attendances.map(a => ({ mealPlanId: a.mealPlanId, willAttend: a.willAttend })));
+  };
+
+  const getMealIcon = (mealType) => {
+    switch (mealType) {
+      case 'BREAKFAST': return 'sunny-outline';
+      case 'LUNCH': return 'restaurant-outline';
+      case 'SNACKS': return 'cafe-outline';
+      case 'DINNER': return 'moon-outline';
+      default: return 'restaurant-outline';
+    }
+  };
+
+  return (
+    <View className="flex-1 bg-white">
+      <View className="bg-primary px-6 py-10 pt-16">
+        <Text className="text-white text-2xl font-bold">Mark Tomorrow's Attendance</Text>
+        <Text className="text-white opacity-80 mt-1">
+          {isMandatory ? 'Required for mess access' : 'Help us plan better'}
+        </Text>
+      </View>
+
+      <ScrollView className="flex-1 px-6 -mt-4">
+        <View className="bg-white rounded-2xl p-6 shadow-sm mb-6">
+          {isMandatory && (
+            <View className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+              <View className="flex-row items-center mb-2">
+                <Ionicons name="warning" size={20} color="#ef4444" />
+                <Text className="text-red-800 font-semibold ml-2">Mandatory Attendance</Text>
+              </View>
+              <Text className="text-red-700 text-sm">
+                You must mark your attendance for tomorrow's meals to access the mess.
+              </Text>
+            </View>
+          )}
+
+          <Text className="text-xl font-bold text-gray-800 mb-4">Tomorrow's Meals</Text>
+          
+          {attendances.map((attendance, index) => (
+            <View key={index} className="border border-gray-200 rounded-xl p-4 mb-3">
+              <View className="flex-row items-center justify-between mb-3">
+                <View className="flex-row items-center">
+                  <Ionicons name={getMealIcon(attendance.mealType)} size={24} color="#1c3c80" />
+                  <View className="ml-3">
+                    <Text className="text-lg font-semibold text-gray-800">{attendance.mealType}</Text>
+                    <Text className="text-gray-600">{attendance.dishName}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View className="flex-row items-center justify-between">
+                <Text className="text-gray-700 font-medium">Will you attend?</Text>
+                <View className="flex-row space-x-2">
+                  <TouchableOpacity
+                    onPress={() => handleToggle(index, true)}
+                    className={`px-4 py-2 rounded-full ${attendance.willAttend ? 'bg-green-500' : 'bg-gray-200'}`}
+                  >
+                    <Text className={`font-semibold ${attendance.willAttend ? 'text-white' : 'text-gray-600'}`}>Yes</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleToggle(index, false)}
+                    className={`px-4 py-2 rounded-full ${attendance.willAttend === false ? 'bg-red-500' : 'bg-gray-200'}`}
+                  >
+                    <Text className={`font-semibold ${attendance.willAttend === false ? 'text-white' : 'text-gray-600'}`}>No</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ))}
+
+          <View className="flex-row space-x-3 mt-6">
+            <TouchableOpacity
+              onPress={onCancel}
+              className="flex-1 bg-gray-200 py-3 rounded-xl"
+            >
+              <Text className="text-gray-700 font-semibold text-center">Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSubmit}
+              className="flex-1 bg-primary py-3 rounded-xl"
+            >
+              <Text className="text-white font-semibold text-center">Confirm Attendance</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+};

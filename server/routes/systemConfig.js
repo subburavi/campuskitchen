@@ -155,4 +155,96 @@ router.post('/meal-times', authenticateToken, requireRole(['ADMIN']), async (req
   }
 });
 
+// Get meal attendance settings
+router.get('/attendance-settings', authenticateToken, async (req, res) => {
+  try {
+    const settings = await req.prisma.mealAttendanceSettings.findFirst();
+    res.json(settings || {
+      isMandatory: false,
+      reminderStartTime: '15:00',
+      reminderEndTime: '22:00',
+      cutoffTime: '23:00'
+    });
+  } catch (error) {
+    console.error('Get attendance settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update meal attendance settings
+router.post('/attendance-settings', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const { isMandatory, reminderStartTime, reminderEndTime, cutoffTime } = req.body;
+    
+    const settings = await req.prisma.mealAttendanceSettings.upsert({
+      where: { id: 'default' },
+      update: {
+        isMandatory,
+        reminderStartTime,
+        reminderEndTime,
+        cutoffTime
+      },
+      create: {
+        isMandatory,
+        reminderStartTime,
+        reminderEndTime,
+        cutoffTime
+      }
+    });
+    
+    res.json({ message: 'Attendance settings updated successfully', settings });
+  } catch (error) {
+    console.error('Update attendance settings error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get payment gateway settings
+router.get('/payment-gateways', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const gateways = await req.prisma.paymentGateway.findMany({
+      orderBy: { provider: 'asc' }
+    });
+    res.json(gateways);
+  } catch (error) {
+    console.error('Get payment gateways error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update payment gateway settings
+router.post('/payment-gateways', authenticateToken, requireRole(['ADMIN', 'SUPERADMIN']), async (req, res) => {
+  try {
+    const { provider, testKeyId, testKeySecret, liveKeyId, liveKeySecret, webhookSecret, isLive, active } = req.body;
+    
+    const gateway = await req.prisma.paymentGateway.upsert({
+      where: { provider },
+      update: {
+        testKeyId,
+        testKeySecret,
+        liveKeyId,
+        liveKeySecret,
+        webhookSecret,
+        isLive,
+        active
+      },
+      create: {
+        provider,
+        testKeyId,
+        testKeySecret,
+        liveKeyId,
+        liveKeySecret,
+        webhookSecret,
+        isLive,
+        active
+      }
+    });
+    
+    res.json({ message: 'Payment gateway updated successfully', gateway });
+  } catch (error) {
+    console.error('Update payment gateway error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

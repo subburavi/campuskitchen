@@ -32,6 +32,7 @@ import MessReport from './pages/MessReport';
 import AdminConfig from './pages/AdminConfig';
 import SystemConfig from './pages/SystemConfig';
 import ScannerLogin from './pages/ScannerLogin';
+import MealAttendanceReport from './pages/MealAttendanceReport';
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -243,6 +244,13 @@ function App() {
             <Route path="/scanner-dashboard" element={
               <ProtectedRoute>
                 <ScannerPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/reports/meal-attendance" element={
+              <ProtectedRoute>
+                <Layout>
+                  <MealAttendanceReport />
+                </Layout>
               </ProtectedRoute>
             } />
           </Routes>

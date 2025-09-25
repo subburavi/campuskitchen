@@ -14,6 +14,7 @@ export default function SubscriptionScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [showPayment, setShowPayment] = useState(false);
   const [paymentData, setPaymentData] = useState(null);
+  const [isHosteler, setIsHosteler] = useState(true);
 
     const isFocused = useIsFocused();
   useEffect(() => {
@@ -25,15 +26,17 @@ export default function SubscriptionScreen({ navigation }) {
 
   const loadSubscriptionData = async () => {
     try {
-      const [currentSub, availablePackages, history] = await Promise.all([
+      const [currentSub, availablePackages, history, profile] = await Promise.all([
         apiService.getCurrentSubscription(),
-        apiService.getAvailablePackages(),
-        apiService.getSubscriptionHistory()
+        apiService.getHostelerPackages(), // Use hosteler-specific packages
+        apiService.getSubscriptionHistory(),
+        apiService.getStudentProfile()
       ]);
 
       setCurrentSubscription(currentSub);
       setPackages(availablePackages);
       setSubscriptionHistory(history);
+      setIsHosteler(profile.isHosteler);
     } catch (error) {
       console.error('Error loading subscription data:', error);
     } finally {
@@ -71,6 +74,36 @@ const handlePaymentSuccess = (order, qrCode) => {
 
     
   };
+
+  // Show message for day scholars
+  if (!isHosteler) {
+    return (
+      <View className="flex-1 bg-secondary">
+        <View className="bg-primary px-6 py-10 pt-14 rounded-b-3xl">
+          <Text className="text-white text-2xl font-bold">Mess Subscription</Text>
+          <Text className="text-white opacity-80 mt-1">Day Scholar Access</Text>
+        </View>
+        
+        <View className="flex-1 justify-center items-center px-6">
+          <View className="bg-white rounded-2xl p-8 shadow-sm items-center">
+            <Ionicons name="information-circle-outline" size={64} color="#3b82f6" />
+            <Text className="text-xl font-bold text-gray-800 mt-4 text-center">Day Scholar Notice</Text>
+            <Text className="text-gray-600 text-center mt-2">
+              Subscription packages are only available for hostel residents. 
+              Day scholars can order individual meals from the Order section.
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Order')}
+              className="bg-primary px-6 py-3 rounded-xl mt-4"
+            >
+              <Text className="text-white font-semibold">Order Individual Meals</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   const initiatePayment = async (packageItem) => {
     try {
       // Create Razorpay order via backend

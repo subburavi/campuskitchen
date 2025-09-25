@@ -3,6 +3,92 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Send meal attendance reminders daily at 3 PM
+cron.schedule('0 15 * * *', async () => {
+  try {
+    console.log('Sending meal attendance reminders...');
+    
+    const settings = await prisma.mealAttendanceSettings.findFirst();
+    if (!settings) return;
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Get all active subscribers who are hostelers
+    const activeSubscriptions = await prisma.subscription.findMany({
+      where: {
+        status: 'ACTIVE',
+        startDate: { lte: tomorrow },
+        endDate: { gte: tomorrow }
+      },
+      include: {
+        student: {
+          include: { hostel: true }
+        }
+      }
+    });
+
+    for (const subscription of activeSubscriptions) {
+      // Only send to hostelers if mandatory, or all if optional
+      if (settings.isMandatory && !subscription.student.isHosteler) {
+        continue;
+      }
+
+      // Check if reminder already sent today
+      const existingReminder = await prisma.mealAttendanceReminder.findUnique({
+        where: {
+          studentId_reminderDate: {
+            studentId: subscription.studentId,
+            reminderDate: tomorrow
+          }
+        }
+      });
+
+      if (existingReminder?.notificationSentAt) continue;
+
+      // Create or update reminder record
+      await prisma.mealAttendanceReminder.upsert({
+        where: {
+          studentId_reminderDate: {
+            studentId: subscription.studentId,
+            reminderDate: tomorrow
+          }
+        },
+        update: {
+          notificationSentAt: new Date()
+        },
+        create: {
+          studentId: subscription.studentId,
+          reminderDate: tomorrow,
+          notificationSentAt: new Date(),
+          markedAttendance: false
+        }
+      });
+
+      // Create notification
+      await prisma.notification.create({
+        data: {
+          studentId: subscription.studentId,
+          title: settings.isMandatory ? 'Mark Tomorrow\'s Meal Attendance (Required)' : 'Mark Tomorrow\'s Meal Attendance',
+          message: `Please mark your attendance for tomorrow's meals. ${settings.isMandatory ? 'This is mandatory for mess access.' : 'This helps us plan better.'}`,
+          type: 'attendance',
+          actionType: 'meal_plan',
+          actionData: { date: tomorrow.toISOString() }
+        }
+      });
+
+      // Send push notification
+      await sendPushNotification(
+        subscription.studentId,
+        settings.isMandatory ? 'Mark Tomorrow\'s Meal Attendance (Required)' : 'Mark Tomorrow\'s Meal Attendance',
+        `Please mark your attendance for tomorrow's meals. Cutoff: ${settings.cutoffTime}`
+      );
+    }
+  } catch (error) {
+    console.error('Meal attendance reminder cron error:', error);
+  }
+});
+
 // Send rating requests 30 minutes after meal attendance
 cron.schedule('*/5 * * * *', async () => {
   try {
@@ -74,7 +160,9 @@ cron.schedule('*/5 * * * *', async () => {
           studentId: attendance.studentId,
           title: 'Rate Your Meal',
           message: `How was your ${attendance.mealPlan.meal.toLowerCase()}? Please rate "${attendance.mealPlan.dish.name}" to help us improve.`,
-          type: 'rating'
+          type: 'rating',
+          actionType: 'rating',
+          actionData: { mealPlanId: attendance.mealPlanId }
         }
       });
 
@@ -145,7 +233,8 @@ cron.schedule('0 14 * * *', async () => {
             studentId: subscription.studentId,
             title: 'Confirm Tomorrow\'s Attendance',
             message: `Will you be attending ${mealPlan.meal.toLowerCase()} tomorrow? Dish: ${mealPlan.dish.name}`,
-            type: 'attendance'
+            type: 'attendance',
+            actionType: 'meal_plan'
           }
         });
 
@@ -198,7 +287,8 @@ cron.schedule('0 9 * * *', async () => {
           studentId: subscription.studentId,
           title: 'Subscription Expiring Soon',
           message: `Your ${subscription.package.name} subscription expires in ${daysRemaining} days. Renew now to continue service.`,
-          type: 'subscription'
+          type: 'subscription',
+          actionType: 'subscription'
         }
       });
 
