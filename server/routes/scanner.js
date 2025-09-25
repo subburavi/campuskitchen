@@ -140,6 +140,7 @@ router.post('/scan', authenticateToken, async (req, res) => {
             scannerDeviceId: deviceId
           },
           create: {
+          }
           data: {
             studentId: student.id,
             mealPlanId: mealPlan.id,
