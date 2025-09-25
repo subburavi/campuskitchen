@@ -1,0 +1,71 @@
+{
+  "expo": {
+    "name": "Mess Management",
+    "slug": "mess-management-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2b377d"
+    },
+     "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#2b377d"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+       "infoPlist": {
+      "LSApplicationQueriesSchemes": [
+         "tez",
+         "phonepe",
+         "paytmmp"
+      ]
+    }
+    },
+    "android": {
+       "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2b377d"
+      },
+       "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.subburavi.messmanagment"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2b377d"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "843025cf-5c6e-4aff-9235-905efbc8c7c7"
+      }
+    }
+  }
+}

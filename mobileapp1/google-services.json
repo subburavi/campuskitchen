@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "812748222928",
+    "project_id": "mess-mangment",
+    "storage_bucket": "mess-mangment.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:812748222928:android:fa4a3df1365dbc8a3fc9d5",
+        "android_client_info": {
+          "package_name": "com.subburavi.messmanagment"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGHYifWXdwyLGOrL4sCAzR0aihuvHp_fw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
